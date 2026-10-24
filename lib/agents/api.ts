@@ -1,0 +1,5 @@
+import {getChatGPTUser} from '@/app/chatgpt-auth';
+import {configuration,listRuns,publicRun,readWorkspace} from './store';
+export const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
+export async function snapshot(userId:string){const state=await readWorkspace(userId);return {...state,runs:(await listRuns(userId)).map(publicRun),runner:await configuration(userId)};}
+export async function authorizedBody(req:Request){const user=await getChatGPTUser();if(!user)return {response:json({error:'Sign in to access your workspace.'},401)};const origin=req.headers.get('origin');if(origin&&origin!==new URL(req.url).origin)return {response:json({error:'Invalid request origin.'},403)};let body;try{const raw=await req.text();if(raw.length>50000)return {response:json({error:'Request is too large.'},413)};body=JSON.parse(raw);if(!body||typeof body!=='object'||Array.isArray(body))throw new Error();}catch{return {response:json({error:'Invalid request.'},400)};}return {user,body};}

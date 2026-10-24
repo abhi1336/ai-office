@@ -1,0 +1,7 @@
+import type {Workspace} from '../workspace.ts';
+import type {AgentRun} from './types.ts';
+function event(w:Workspace,id:string,text:string){if(!w.activity.some(a=>a.id===id))w.activity.unshift({id,text,at:new Date().toISOString()});w.activity=w.activity.slice(0,100);}
+export function applyRunResult(current:Workspace,row:AgentRun):Workspace{const w=structuredClone(current);if(w.activity.some(a=>a.id===`finished:${row.id}`))return w;const t=w.tasks.find(t=>t.id===row.taskId);if(!t||t.latestRunId!==row.id||t.syncedRunId===row.id)return w;t.syncedRunId=row.id;
+ if(row.status==='completed'&&row.result){const result=row.result;t.status='Review';const reviewId=`review:${row.id}`;if(!w.inbox.some(r=>r.id===reviewId))w.inbox.unshift({id:reviewId,title:`Review: ${t.title}`,detail:result.summary,type:'Approval',status:'Pending',reply:'',createdAt:row.updatedAt,taskId:t.id,runId:row.id});for(const [i,q] of result.questions.entries()){const id=`question:${row.id}:${i}`;if(!w.inbox.some(r=>r.id===id))w.inbox.unshift({id,title:q.slice(0,160),detail:q,type:'Question',status:'Pending',reply:'',createdAt:row.updatedAt,taskId:t.id,runId:row.id});}event(w,`finished:${row.id}`,`${row.title}: agent deliverable ready for review.`);}
+ else{t.status='Backlog';event(w,`finished:${row.id}`,`${row.title}: ${row.status}. ${row.error??''}`);}while(w.inbox.length>500){const index=w.inbox.findLastIndex(r=>r.status!=='Pending');if(index<0)break;w.inbox.splice(index,1);}return w;
+}
