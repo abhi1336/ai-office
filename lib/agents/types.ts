@@ -1,10 +1,13 @@
 export type RunStatus = 'starting' | 'queued' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'submission_unknown';
+import type {TeamContribution} from './skills.ts';
+
 export type AgentResult = {
   summary: string;
   deliverable: string;
   files: {path: string; language: string; content: string}[];
   subtasks: {title: string; description: string; agent: string; priority: 'High'|'Medium'|'Low'}[];
   questions: string[];
+  team?: TeamContribution[];
 };
 export type AgentRun = {
   id: string; taskId: string; title: string; agent: string; status: RunStatus;

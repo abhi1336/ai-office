@@ -2,7 +2,7 @@
 
 A private product-team workspace with an interactive office, eight team roles, persistent tasks, a decision inbox, an editable handbook, and saved work history.
 
-**Status:** supports a local Ollama model for task runs, with results saved to One Inbox for your review. ChatGPT Site tools remain available in the hosted version. Local execution uses no OpenAI API key and does not run unattended; start each run from the task page. GitHub integration is deferred.
+**Status:** supports one-click, eight-role task runs through a local Ollama model, with results saved to One Inbox for your review. ChatGPT Site tools remain available in the hosted version. Local execution uses no OpenAI API key. Runs still need a user to start them and keep the page open; GitHub integration and unattended background runs are deferred.
 
 ## Stack
 React 19, TypeScript, Vinext, Cloudflare Workers, Drizzle, and Cloudflare D1. The private Site authenticates the caller. ChatGPT tools use a stateless JSON-RPC endpoint at `/mcp`, with every read and write scoped to the authenticated user.
@@ -25,10 +25,10 @@ Apply each migration once, in order. Local preview does not create the ChatGPT S
 
 1. Start Ollama and confirm `ollama list` shows `qwen3.5:4b`.
 2. Start this app with `pnpm dev` and open `http://127.0.0.1:5173`.
-3. Create or open a task, then choose **Run with Ollama**. Keep the page open until the result is saved.
-4. Review the saved deliverable in the task and One Inbox.
+3. Create or open a task, then choose **Run full team**. Keep the page open while Product Lead, Product Manager, UX Architect, UI/UX Designer, AI Engineer, Software Engineer, QA Engineer, and DevOps Engineer work in sequence. Each role receives prior handoffs.
+4. Review the role contributions and final deliverable in the task and One Inbox.
 
-The app calls Ollama at `http://localhost:11434`. Ollama allows loopback origins by default; use `127.0.0.1` in the app address. Local runs require the Ollama desktop app and this project to be running on the same PC. They do not apply generated code or run as a background queue.
+The app calls Ollama at `http://localhost:11434`. Ollama allows loopback origins by default; use `127.0.0.1` in the app address. Local runs require the Ollama desktop app and this project to be running on the same PC. One start automatically performs the eight role handoffs, but execution stays in the open page and can be canceled. A failed role stops the run. Results are saved only after all roles finish. Proposed files are not applied or executed, and QA creates checks rather than running tests. See [the role skills](docs/team-skills.md).
 
 ## Try it in ChatGPT
 The **AI Product Office** app/plugin is installed in ChatGPT. If its tools are not available in this conversation, start a new ChatGPT Work chat and open it from Apps or Plugins. Open a chat, choose the model you want (for example, GPT-6 Luna if available in your model selector), then ask it to inspect the workspace, complete a task, and save the deliverable. The connector does not read your ChatGPT conversation history; it only receives explicit tool calls. Saved work appears in the task details and One Inbox for your review.
@@ -45,7 +45,7 @@ pnpm typecheck
 pnpm build
 ```
 
-Tests cover MCP tool schemas and request validation, user-scoped tool dispatch, safe deliverable paths, delegation roles, and workspace task and review rules.
+Tests cover MCP tool schemas and request validation, user-scoped tool dispatch, safe deliverable paths, role skills and sequential team handoffs, and workspace task and review rules.
 
 ## Source map
 - `app/office-app.tsx`: workspace UI

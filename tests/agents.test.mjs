@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {initialWorkspace,applyAction} from '../lib/workspace.ts';
 import {parseResult} from '../lib/agents/protocol.ts';
+import {buildSkillMessages,roleSkills,teamRunOrder} from '../lib/agents/skills.ts';
+import {runTeamPipeline} from '../lib/agents/team-runner.ts';
 import {rpcEnvelope,runTool,tools} from '../lib/mcp/server.ts';
 const result=()=>({summary:'A completed plan',deliverable:'# Plan\nA concrete outcome.',files:[],subtasks:[],questions:[]});
 test('MCP discovery exports read, create, save, and review tools with strict schemas',()=>{
@@ -21,6 +23,39 @@ test('deliverable validation rejects unsafe paths, excessive content, and unsupp
  const subtasks=[{title:'Build login',description:'Accessible login form',agent:'eng',priority:'High'}];
  assert.throws(()=>parseResult({...result(),subtasks},'pm'),/Product Lead/);assert.equal(parseResult({...result(),subtasks},'lead').subtasks.length,1);
  assert.throws(()=>parseResult({...result(),subtasks:[{...subtasks[0],agent:'lead'}]},'lead'),/owner/);
+});
+test('all eight team roles have focused skills and receive prior handoffs',()=>{
+ assert.deepEqual(teamRunOrder,['lead','pm','ux','design','ai','eng','qa','ops']);
+ for(const id of teamRunOrder){assert.ok(roleSkills[id].objective);assert.ok(roleSkills[id].instructions.length>=3);assert.ok(roleSkills[id].output);}
+ const prior=[{agent:'pm',summary:'Acceptance criteria',deliverable:'Given a signed-in user, save the task.'}];
+ const messages=buildSkillMessages('eng',{title:'Build the task page',description:'Use the acceptance criteria.',owner:'lead'},prior);
+ assert.match(messages.system,/Software Engineer/);assert.match(messages.user,/Product Manager/);assert.match(messages.user,/Given a signed-in user/);
+});
+test('saved team contributions are role-scoped, unique, and size-limited',()=>{
+ const team=teamRunOrder.map(agent=>({agent,summary:`${agent} summary`,deliverable:`${agent} contribution`}));
+ assert.equal(parseResult({...result(),team},'pm').team.length,8);
+ const unknown=[...team];unknown[2]={...unknown[2],agent:'not-a-role'};
+ assert.throws(()=>parseResult({...result(),team:unknown},'pm'),/team role/);
+ assert.throws(()=>parseResult({...result(),team:team.map((item,index)=>index===1?team[0]:item)},'pm'),/team role/);
+ assert.throws(()=>parseResult({...result(),team:[...team.slice(0,7)]},'pm'),/all eight role/);
+ assert.throws(()=>parseResult({...result(),team:[...team,team[0]]},'pm'),/all eight role/);
+ const oversized=[...team];oversized[0]={...oversized[0],deliverable:'x'.repeat(1601)};
+ assert.throws(()=>parseResult({...result(),team:oversized},'pm'),/oversized/);
+});
+test('a full team run completes each role in order and only the engineer contributes files',async()=>{
+ const calls=[];const result=await runTeamPipeline({title:'Plan a launch',description:'Create a reviewable launch plan.',owner:'pm'},async(agent,messages)=>{
+  calls.push(agent);
+  if(agent==='eng')assert.match(messages.user,/Acceptance criteria/);
+  if(agent==='qa')assert.match(messages.user,/Draft only/);
+  return {summary:`${agent} complete`,deliverable:agent==='pm'?'Acceptance criteria from the Product Manager.':`${agent} contribution`,files:agent==='eng'?[{path:'launch-plan.md',language:'markdown',content:'Draft only.'}]:[],subtasks:[],questions:agent==='qa'?['Confirm supported browsers.']:[]};
+ });
+ assert.deepEqual(calls,teamRunOrder);assert.equal(result.team.length,8);assert.equal(result.team.at(-1).agent,'ops');
+ assert.equal(result.files.length,1);assert.equal(result.subtasks.length,0);assert.deepEqual(result.questions,['Confirm supported browsers.']);
+ assert.match(result.deliverable,/did not change repository files/);
+});
+test('a failed role stops later handoffs',async()=>{
+ const calls=[];await assert.rejects(()=>runTeamPipeline({title:'Plan a launch',description:'A launch plan.',owner:'lead'},async(agent)=>{calls.push(agent);if(agent==='qa')throw new Error('QA failed');return {summary:'ok',deliverable:'ok',files:[],subtasks:[],questions:[]};}),/QA failed/);
+ assert.deepEqual(calls,teamRunOrder.slice(0,teamRunOrder.indexOf('qa')+1));
 });
 test('MCP tools scope reads and writes to the authenticated identity supplied by the caller',async()=>{
  let workspace=initialWorkspace();const called=[];const deps={userId:'signed-in-user',getWorkspace:async(user)=>{called.push(user);return {workspace,revision:1};},createTask:async(user,action)=>{called.push(user);workspace=applyAction(workspace,action);return workspace;},getTask:async(user,id)=>{called.push(user);return {user,id};},saveDeliverable:async(user,taskId,runId,r)=>{called.push(user);return {user,taskId,runId,r};},resolveRequest:async(user,id,decision)=>{called.push(user);return {...workspace,inbox:[{id,decision}]};}};
